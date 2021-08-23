@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd">
+	<salesforce:sfdc-config name="Salesforce_Config" doc:name="Salesforce Config" doc:id="fc47f9a5-2a84-4028-bebf-63f7e0d2b632" >
+		<salesforce:basic-connection username="skompella@open-logix.com" password="Karthik#1" securityToken="Rg5ieKZh8DrbZX7V40jTpBDzv" />
+	</salesforce:sfdc-config>
+	<flow name="pingFlow" doc:id="0c5496a3-54bf-4c1b-9c17-d0eaa451f7e5" >
+		<ee:transform doc:name="Transform Message" doc:id="6c0cae94-158b-4e1f-bc92-67453c03a05a" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"serverName": server.host,
+	"status": "Running",
+	"timestamp": now()
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+	<flow name="createRecordFlow" doc:id="3c9702c6-6f2a-4f34-8ca4-42a2c23be039" >
+		<ee:transform doc:name="Map User Payload to SF Fields" doc:id="1a9a06c0-657c-4f6e-a077-06d170c77a55" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+[{
+	FirstName: payload.firstName,
+	LastName: payload.lastName,
+	Phone: payload.phone,
+	Email: payload.email,
+	Department: payload.department,
+	Birthdate: payload.birthDate as Date
+}]]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<salesforce:create doc:name="Contact" doc:id="6323e704-74bc-4921-ad01-b22becf90e7c" config-ref="Salesforce_Config" type="Contact"/>
+		<set-variable value="#[if(payload.successful == false) 500 else 201]" doc:name="httpStatus to 500" doc:id="cb84f1ac-d4b0-46ff-a55c-f6ba782e6bc8" variableName="httpStatus" />
+		<ee:transform doc:name="Response" doc:id="3d6b101c-3fce-40d2-9aeb-b499a9627d18" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"status": if(payload.successful == true) "success" else "fail"
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+	<flow name="bulkInsertRecordsFlow" doc:id="cfe23f26-dfaa-4729-84d5-ea7ffceda2b5" >
+		<ee:transform doc:name="Access File Contents" doc:id="d2ec91e6-9b53-48d9-bc24-8f2cf9096c74" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+payload.parts.file.content]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<ee:transform doc:name="Map user payload to SF Fields" doc:id="4ab5271b-12e8-41de-ba02-83a56b61dff4" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+payload map {
+	FirstName: $.firstName,
+	LastName: $.lastName,
+	Phone: $.phone,
+	Email: $.email,
+	Department: $.department,
+	Birthdate: $.birthDate as Date{format: "MM/dd/yyyy"}
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<salesforce:create-job-bulk-api-v2 doc:name="Insert Records into Contacts" doc:id="20f1c24b-711e-451b-8c49-1e9241a8a002" config-ref="Salesforce_Config" objectType="Contact" operation="insert"/>
+		<ee:transform doc:name="Transform Message" doc:id="63496378-c12c-4301-8bd0-31a4c1ecfa19" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	success: "true",
+	data: payload
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+</mule>
